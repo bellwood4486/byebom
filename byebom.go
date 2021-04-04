@@ -1,26 +1,26 @@
 package byebom
 
 import (
-	"bufio"
 	"fmt"
 	"io"
+
+	"golang.org/x/text/encoding"
+
+	goenc "github.com/mattn/go-encoding"
+
+	"golang.org/x/text/encoding/unicode"
+	"golang.org/x/text/transform"
 )
 
-// Normalize normalizes the contents of the io.Reader.
-func Normalize(r io.Reader) io.Reader {
-	if r == nil {
-		return r
-	}
+func NewUTF8Reader(r io.Reader) io.Reader {
+	vr := transform.NewReader(r, encoding.UTF8Validator)
+	return transform.NewReader(vr, unicode.UTF8BOM.NewDecoder())
+}
 
-	br := bufio.NewReader(r)
-	bs, err := br.Peek(3)
-	if err != nil {
-		return br
+func NewReaderWithoutBOM(r io.Reader, fallbackEncName string) (io.Reader, error) {
+	enc := goenc.GetEncoding(fallbackEncName)
+	if enc == nil {
+		return nil, fmt.Errorf("byebom: unknown encode %v", fallbackEncName)
 	}
-	if bs[0] == 0xEF && bs[1] == 0xBB && bs[2] == 0xBF {
-		if _, err := br.Discard(3); err != nil {
-			panic(fmt.Sprintf("byebom: %v", err))
-		}
-	}
-	return br
+	return transform.NewReader(r, unicode.BOMOverride(enc.NewDecoder())), nil
 }

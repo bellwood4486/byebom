@@ -1,56 +1,58 @@
 package byebom
 
 import (
-	"github.com/stretchr/testify/assert"
 	"io"
 	"strings"
 	"testing"
+
+	"golang.org/x/text/encoding"
+
+	"github.com/stretchr/testify/assert"
 )
 
-const bomUTF8 = "\xEF\xBB\xBF"
+const utf8BOM = "\ufeff"
 
-func TestNormalize(t *testing.T) {
+func TestNewUTF8Reader(t *testing.T) {
 	type args struct {
 		r io.Reader
 	}
 	tests := []struct {
-		name    string
-		args    args
-		wantNil bool
-		wantStr string
+		name               string
+		args               args
+		want               string
+		wantInvalidUTF8Err bool
 	}{
 		{
-			name: "handle nil",
+			name: "with BOM",
 			args: args{
-				r: nil,
+				r: strings.NewReader(utf8BOM + "a"),
 			},
-			wantNil: true,
+			want: "a",
 		},
 		{
-			name: "trim bom when contained",
+			name: "without BOM",
 			args: args{
-				r: strings.NewReader(bomUTF8 + "a"),
+				r: strings.NewReader("a"),
 			},
-			wantStr: "a",
+			want: "a",
 		},
 		{
-			name: "do nothing when not contained",
+			name: "not UTF-8(euc-jp)",
 			args: args{
-				r: strings.NewReader("b"),
+				r: strings.NewReader("\xa5\xa8\xa5\xe9\xa1\xbc"), // means "エラー"
 			},
-			wantStr: "b",
+			wantInvalidUTF8Err: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := Normalize(tt.args.r)
-			if tt.wantNil {
-				assert.Nil(t, got)
+			got := NewUTF8Reader(tt.args.r)
+			gotB, err := io.ReadAll(got)
+			if tt.wantInvalidUTF8Err {
+				assert.Equal(t, encoding.ErrInvalidUTF8, err)
 			} else {
-				gotB, err := io.ReadAll(got)
-				if assert.NoError(t, err) {
-					assert.Equal(t, tt.wantStr, string(gotB))
-				}
+				assert.NoError(t, err)
+				assert.Equal(t, tt.want, string(gotB))
 			}
 		})
 	}
